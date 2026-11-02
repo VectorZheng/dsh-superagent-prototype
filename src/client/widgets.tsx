@@ -9,6 +9,34 @@ import { errorText, fullTime, readableMarkers, setupText, when } from './text.ts
 
 const external = { target: '_blank', rel: 'noopener noreferrer' } as const
 
+/**
+ * Scroll `element` inside the panel column or a modal body.
+ * `scrollIntoView` also scrolls the host page, which forces a document scrollbar beside Harness chrome.
+ */
+export function scrollInPanel(element: HTMLElement, block: 'start' | 'center' | 'nearest' = 'start'): void {
+  const scroller = element.closest<HTMLElement>('.dt-column, .dt-modal-body')
+  if (!scroller) return
+  const elementBox = element.getBoundingClientRect()
+  const scrollerBox = scroller.getBoundingClientRect()
+  const delta = elementBox.top - scrollerBox.top
+  if (block === 'nearest') {
+    if (delta < 0) scroller.scrollTop += delta
+    else if (delta + elementBox.height > scrollerBox.height) scroller.scrollTop += delta + elementBox.height - scrollerBox.height
+    return
+  }
+  const offset = block === 'center' ? (scrollerBox.height - elementBox.height) / 2 : 0
+  scroller.scrollTop = Math.max(0, scroller.scrollTop + delta - offset)
+}
+/** Keep a tab inside its horizontal strip without scrolling the column or the host page. */
+export function scrollTabIntoStrip(tab: HTMLElement): void {
+  const strip = tab.closest<HTMLElement>('.dt-tabs')
+  if (!strip) return
+  const tabBox = tab.getBoundingClientRect()
+  const stripBox = strip.getBoundingClientRect()
+  if (tabBox.left < stripBox.left) strip.scrollLeft -= stripBox.left - tabBox.left
+  else if (tabBox.right > stripBox.right) strip.scrollLeft += tabBox.right - stripBox.right
+}
+
 export function When({ at }: { at: string | undefined }) {
   const { t } = usePanel()
   return <time dateTime={at} title={fullTime(at, t('lang'))}>{when(at, t('lang'))}</time>

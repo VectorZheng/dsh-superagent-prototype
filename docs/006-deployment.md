@@ -130,6 +130,26 @@ Each profile stores logs and control files under `.artifacts/`:
 
 Open the URL printed in the log, then choose **Superagent** in the sidebar.
 
+### Smoke the panel
+
+From this checkout, against the `superagent` profile (port 3082 unless `cordis.patch.yml` says otherwise):
+
+```sh
+pnpm check
+scripts/dsh-superagent --profile superagent status
+```
+
+`status` prints JSON and exits 0 when the runtime is up, or 3 when it is waiting for setup. Exit 3 still means the panel can save Sources, Policy, and Execution. The script's default URL is `http://127.0.0.1:3082`. Open that origin, choose **Superagent**, and confirm:
+
+- The document does not grow a scrollbar. Lists scroll inside the panel column.
+- Overview loads. The page calls `GET /orchestrator/api/state` and `GET /orchestrator/api/overview` with header `x-orchestrator-request: 1`.
+- Settings → Sources saves with `PUT /orchestrator/api/settings/source:github` (and `source:feishu` when that Source is on). A setup problem on another Settings group links to the card that fixes it.
+- Execution pause calls `POST /orchestrator/api/executor/pause`. Ticket retry and stop call `POST /orchestrator/api/tickets/<id>/retry` and `POST /orchestrator/api/tickets/<id>/stop`.
+
+Those routes answer while the first account probe is still running, so a slow or failed CLI check does not leave the panel on "loading".
+
+`scripts/dsh-superagent` needs Python 3, `tmux`, and POSIX `ps` / `fcntl`. On a machine without them, start the same profile directly with `dsh --profile superagent` and open the URL it prints. Paths in that profile's `cordis.patch.yml`, including `stateDir`, must be absolute paths on that machine. Do not commit tokens, app secrets, or `cordis.patch.yml` from a real profile.
+
 ### Hourly check
 
 Create the hourly check in the DeepSeek Harness profile you normally use, not in `superagent`. It must keep running when the agent service is down. Ask an agent in that profile to create an hourly schedule using this prompt, with the checkout path filled in:

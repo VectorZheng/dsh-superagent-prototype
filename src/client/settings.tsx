@@ -5,15 +5,19 @@ import { EvalSettings } from './eval.tsx'
 import { ExecutionSettings } from './execution.tsx'
 import { PromptsPage } from './prompts.tsx'
 import { usePanel } from './provider.tsx'
-import { SETTINGS_GROUPS, settingsRoute, type SettingsGroup } from './route.ts'
+import { SETTINGS_GROUPS, settingsRoute, setupPage, type SettingsGroup } from './route.ts'
 import { SettingsProvider } from './settings-kit.tsx'
 import { SourceSettings } from './source.tsx'
+import { SetupMessage } from './widgets.tsx'
 
 const STAGE_GROUPS: readonly SettingsGroup[] = ['source', 'eval', 'execution']
 export function SettingsPage({ group, query, state, deploymentForm }: {
   group: SettingsGroup; query: { source?: string; version?: string }; state: StateView; deploymentForm: DeploymentForm
 }) {
   const { t, navigate } = usePanel()
+  const blocking = state.setup.problem ?? state.setup.feishuProblem
+  // The Source and Deployment groups already show the problem on the card that fixes it.
+  const onFix = !!blocking && (blocking.place === 'deployment' ? group === 'deployment' : group === 'source')
   const content = (() => {
     switch (group) {
       case 'source': return <SettingsProvider><SourceSettings {...query.source ? { focus: query.source } : {}} /></SettingsProvider>
@@ -32,6 +36,10 @@ export function SettingsPage({ group, query, state, deploymentForm }: {
     </nav>
     <div className="dt-settings-body">
       <h2 className="dt-settings-title">{t(`settingsGroup.${group}`)}</h2>
+      {blocking && !onFix && <p className="dt-banner" role="status">
+        <SetupMessage problem={blocking} lead />{' '}
+        <button type="button" className="dt-textlink" onClick={() => navigate(setupPage(blocking.place))}>{t('setupFixLink')}</button>
+      </p>}
       {content}
     </div>
   </div>

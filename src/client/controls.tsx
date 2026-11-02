@@ -1,6 +1,6 @@
 /**
- * Context-free UI primitives styled with `--dsw-alias-*` tokens.
- * Mirrors DSH ui-primitives markup and keyboard behavior without coupling to its internal package API.
+ * Context-free UI primitives. Visuals live in client.css (Neo-Brutalist tokens).
+ * Markup and keyboard behavior stay local so the bundle does not import `@deepseek-ai/dsh-client-ui-primitives`.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent,
   type ReactNode } from 'react'

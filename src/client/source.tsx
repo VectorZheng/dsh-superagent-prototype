@@ -9,7 +9,7 @@ import { usePanel, usePanelData } from './provider.tsx'
 import { setupPage, settingsRoute, type Route } from './route.ts'
 import { ConfigHistory, Fields, SourceField, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { actorName, healthText, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
-import { CheckSetupButton, Hint, LabelValue, LoadState, SetupMessage, StatusHead, When } from './widgets.tsx'
+import { CheckSetupButton, Hint, LabelValue, LoadState, scrollInPanel, SetupMessage, StatusHead, When } from './widgets.tsx'
 
 function SourceCard({ source }: { source: SourceView }) {
   const { t, call } = usePanel()
@@ -60,7 +60,11 @@ function SourceCard({ source }: { source: SourceView }) {
 
 export function SourceSettings({ focus }: { focus?: string }) {
   const { sources } = useSettings().settings
-  useEffect(() => { if (focus) document.getElementById(`dt-source-${focus}`)?.scrollIntoView?.({ block: 'start' }) }, [focus])
+  useEffect(() => {
+    if (!focus) return
+    const card = document.getElementById(`dt-source-${focus}`)
+    if (card) scrollInPanel(card, 'start')
+  }, [focus])
   return <div className="dt-form">
     {sources.map(source => <SourceCard key={source.id} source={source} />)}
     <ConfigHistory blocks={['source:']} />

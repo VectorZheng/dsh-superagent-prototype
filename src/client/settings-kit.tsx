@@ -9,7 +9,7 @@ import { useDraft } from './draft.tsx'
 import { useAction, usePanel, usePanelData } from './provider.tsx'
 import { settingsRoute } from './route.ts'
 import { errorText, localized, valueLabel, when, type T } from './text.ts'
-import { Hint, LoadState } from './widgets.tsx'
+import { Hint, LoadState, scrollInPanel } from './widgets.tsx'
 
 /** Parse a numeric input string, returning `null` when empty so the server rejects blank required numbers instead of coercing to 0. */
 export const numberOf = (text: string): number | null => text.trim() ? Number(text) : null
@@ -134,8 +134,9 @@ export function ConfigHistory({ blocks, versions, focus }: { blocks: string[]; v
   const items = data?.items.filter(item => (versions && item.policyChanged) || listed(item.block)) ?? []
   // Match the oldest save that produced the focused Policy version (where that version originated).
   const target = focus ? items.filter(item => item.policyChanged && item.policyVersion.startsWith(focus)).at(-1) : undefined
-  const scroll = (element: HTMLLIElement | null) => { if (element
-    && !element.dataset.scrolled) { element.dataset.scrolled = '1'; element.scrollIntoView?.({ block: 'center' }) } }
+  const scroll = (element: HTMLLIElement | null) => {
+    if (element && !element.dataset.scrolled) { element.dataset.scrolled = '1'; scrollInPanel(element, 'center') }
+  }
   return <DisclosureRow icon={<Icon name="history" />} title={t('configHistory')} open={open} onToggle={() => setOpen(!open)}>
     <div className="dt-disclosure-body">
       {error && <p className="dt-error">{error}</p>}

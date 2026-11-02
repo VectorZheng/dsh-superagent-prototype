@@ -14,6 +14,46 @@ it('styles only classes a component uses', () => {
   expect([...classes].filter(name => !used(name))).toEqual([])
 })
 
+it('keeps the neo-brutalist surface: hard shadows, square corners, snap timing', () => {
+  const body = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  for (const token of ['#ff006e', '#ffff00', '#ccff00', '#00d9ff']) expect(body.toLowerCase()).toContain(token)
+  expect(body).toMatch(/--dt-dur:\s*150ms/)
+  expect(body).toMatch(/--dt-ease:\s*ease-out/)
+  expect(body).not.toMatch(/backdrop-filter|color-mix\(|linear-gradient|radial-gradient|--dsw-alias-|--dsw-elevation|--dsw-shadow|--dsw-mask/)
+  const shadows = [...body.matchAll(/box-shadow:\s*([^;}]+)/g)].map(match => match[1]!)
+  expect(shadows.length).toBeGreaterThan(0)
+  for (const shadow of shadows) {
+    if (/^\s*none\s*$/.test(shadow)) continue
+    for (const part of shadow.split(',').map(item => item.trim())) {
+      // Blur and spread are the third and fourth lengths. Unitless 0 matches the mock (`Npx Npx 0 0`).
+      const lengths = [...part.matchAll(/-?\d*\.?\d+px|\b0\b/g)].map(match => match[0] === '0' ? '0px' : match[0])
+      expect(lengths.length, part).toBeGreaterThanOrEqual(4)
+      expect(lengths[2], part).toBe('0px')
+      expect(lengths[3], part).toBe('0px')
+    }
+  }
+  for (const radius of [...body.matchAll(/border-radius:\s*([^;}]+)/g)].map(match => match[1]!.trim())) {
+    expect(radius === '0' || radius === '50%').toBe(true)
+  }
+  for (const transition of [...body.matchAll(/transition:\s*([^;}]+)/g)].map(match => match[1]!)) {
+    if (!/(transform|box-shadow)/.test(transition)) continue
+    expect(transition).toMatch(/150ms|var\(--dt-dur\)/)
+    expect(transition).toMatch(/ease-out|var\(--dt-ease\)/)
+  }
+})
+
+it('locks the page to the viewport and scrolls the column inside it', () => {
+  const page = /\.dt-page \{([^}]*)\}/.exec(css)?.[1]
+  const column = /\.dt-page > \.dt-column \{([^}]*)\}/.exec(css)?.[1]
+  expect(page).toMatch(/display:\s*flex/)
+  expect(page).toMatch(/flex-direction:\s*column/)
+  expect(page).toMatch(/overflow:\s*hidden/)
+  expect(page).not.toMatch(/overflow:\s*auto/)
+  expect(column).toMatch(/overflow:\s*auto/)
+  expect(column).toMatch(/min-height:\s*0/)
+  expect(column).toMatch(/flex:\s*1 1 auto/)
+})
+
 it('writes one rule per line, each selector once within its block', () => {
   const blocks: string[][] = [[]]
   for (const line of css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(text => text.trim()).filter(Boolean)) {

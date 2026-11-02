@@ -6,7 +6,7 @@ import { decisionMark } from './marks.ts'
 import { useAction, usePanel } from './provider.tsx'
 import { DecisionLine, Earlier, TicketLine, automatedRuns } from './rows.tsx'
 import { actorName, errorText, readableMarkers, reasonLabel, valueLabel, when, type T } from './text.ts'
-import { ActionLink, ClampText, ConfirmButton, Hint, LoadState, PageHead, Section, When } from './widgets.tsx'
+import { ActionLink, ClampText, ConfirmButton, Hint, LoadState, PageHead, scrollInPanel, Section, When } from './widgets.tsx'
 
 /** Disposition tags for a Trigger; omits `ignore` (the common case) and suppresses fanout tags when every target Ticket is already listed in `subscribed`. */
 function triggerTags(t: T, trigger: TriggerRow, subscribed?: Set<string>): ReactNode {
@@ -33,7 +33,7 @@ function TriggerItem({ trigger, earlier, target, subscribed, requeue }: {
   const ticketId = trigger.disposition.decision?.ticketId
   const scroll = (element: HTMLLIElement | null) => {
     if (element && target === trigger.id
-      && !element.dataset.scrolled) { element.dataset.scrolled = '1'; element.scrollIntoView?.({ block: 'center' }) }
+      && !element.dataset.scrolled) { element.dataset.scrolled = '1'; scrollInPanel(element, 'center') }
   }
   return <li id={`trigger-${trigger.id}`} className={`dt-event${target === trigger.id ? ' dt-highlight' : ''}${trigger.human ? ''
     : ' dt-event-quiet'}`} ref={scroll}>

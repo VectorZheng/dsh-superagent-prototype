@@ -96,3 +96,33 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
     body: { error: `Request exceeds ${128 * 1024} bytes` } })
   expect(saves).toEqual([])
 })
+
+it('answers the panel while startup is still probing, so first-run settings are reachable', async () => {
+  let release = () => {}
+  const ready = new Promise<void>(resolve => { release = resolve })
+  const saved: unknown[] = []
+  const settings = SettingsSchema.parse({})
+  const call = serve({
+    ready,
+    masterId: 'master',
+    health: { runtime: { state: 'starting', detail: '' } },
+    configured: () => false,
+    machine: { stateDir: '/srv/state', promptMaxChars: { get: () => 100_000 }, admissionContextMaxPages: { get: () => 10 },
+      admissionContextTimeoutMs: { get: () => 15_000 } },
+    executor: { activeCount: () => 0 },
+    store: { settings: () => settings, tickets: { open: () => [], get: () => undefined } },
+    sources: { instances: () => [{ id: 'github' }] },
+    settings: { save: async (...args: unknown[]) => { saved.push(args); return { revision: 1, restarting: false } } },
+  })
+  const raced = await Promise.race([
+    call('GET', 'state').then(value => ({ done: true as const, value })),
+    new Promise<{ done: false }>(resolve => { setTimeout(() => resolve({ done: false }), 40) }),
+  ])
+  expect(raced.done).toBe(true)
+  if (!raced.done) return
+  expect(raced.value).toMatchObject({ status: 200, body: { masterId: 'master', setup: { problem: null, accounts: null, machine: { stateDir: '/srv/state' } },
+    load: { running: 0, queued: 0 } } })
+  expect(await call('PUT', 'settings/source:github', { value: { enabled: true, config: {} }, revision: 0 })).toMatchObject({ status: 200, body: { revision: 1, restarting: false } })
+  expect(saved).toHaveLength(1)
+  release()
+})

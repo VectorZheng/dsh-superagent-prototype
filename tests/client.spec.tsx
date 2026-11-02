@@ -3,6 +3,7 @@ import { act, useState, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { ApiError, caller, usePoll } from '../src/client/api.ts'
+import { scrollInPanel, scrollTabIntoStrip } from '../src/client/widgets.tsx'
 import { apply } from '../src/client/index.tsx'
 import { zh } from '../src/client/locales.ts'
 import { SettingsSchema } from '../src/policy.ts'
@@ -142,4 +143,58 @@ it('tells a dsh-superagent that does not answer from a record it does not have, 
     status: 400, missing: false, unreachable: false })
   expect(await failure(async () => Response.json({ error: 'Unknown ticket', code: 'unknownTicket' }, { status: 404 }))).toEqual({
     message: 'user unknownTicket', status: 404, missing: true, unreachable: false })
+})
+
+it('calls the orchestrator on /orchestrator/api/ with the panel header', async () => {
+  const seen: { url: string; method: string; header: string | null; body?: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    seen.push({ url: String(url), method: init?.method ?? 'GET', header: new Headers(init?.headers).get('x-orchestrator-request'),
+      ...init?.body === undefined ? {} : { body: String(init.body) } })
+    return Response.json({})
+  }))
+  const messages = { offline: '', notRunning: '', serverError: () => '', requestFailed: () => '', setup: () => '', user: () => '' }
+  const call = caller(() => messages)
+  await call('GET state')
+  await call('GET overview')
+  await call('POST executor/pause', { body: { paused: true } })
+  await call('POST tickets/:id/retry', { id: 't1' })
+  await call('POST tickets/:id/stop', { id: 't1' })
+  await call('PUT settings/:block', { block: 'source:github', body: { value: { enabled: true }, revision: 0 } })
+  expect(seen).toEqual([
+    { url: '/orchestrator/api/state', method: 'GET', header: '1' },
+    { url: '/orchestrator/api/overview', method: 'GET', header: '1' },
+    { url: '/orchestrator/api/executor/pause', method: 'POST', header: '1', body: '{"paused":true}' },
+    { url: '/orchestrator/api/tickets/t1/retry', method: 'POST', header: '1' },
+    { url: '/orchestrator/api/tickets/t1/stop', method: 'POST', header: '1' },
+    { url: '/orchestrator/api/settings/source%3Agithub', method: 'PUT', header: '1', body: '{"value":{"enabled":true},"revision":0}' },
+  ])
+})
+
+it('scrolls inside the panel column and the tab strip, not the host page', () => {
+  const box = (top: number, left: number, width: number, height: number): DOMRect => ({ top, left, right: left + width, bottom: top + height,
+    width, height, x: left, y: top, toJSON: () => ({}) })
+  const page = document.createElement('div')
+  page.className = 'dt-page'
+  const column = document.createElement('div')
+  column.className = 'dt-column'
+  const target = document.createElement('div')
+  const tabs = document.createElement('div')
+  tabs.className = 'dt-tabs'
+  const tab = document.createElement('button')
+  column.append(tabs, target)
+  tabs.append(tab)
+  page.append(column)
+  document.body.append(page)
+  column.getBoundingClientRect = () => box(0, 0, 200, 100)
+  target.getBoundingClientRect = () => box(250, 0, 20, 20)
+  tabs.getBoundingClientRect = () => box(0, 0, 80, 36)
+  tab.getBoundingClientRect = () => box(0, 120, 40, 36)
+  const scrolled = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  scrollInPanel(target, 'start')
+  scrollTabIntoStrip(tab)
+  expect(column.scrollTop).toBe(250)
+  expect(tabs.scrollLeft).toBe(80)
+  expect(scrolled).not.toHaveBeenCalled()
+  scrolled.mockRestore()
+  page.remove()
 })

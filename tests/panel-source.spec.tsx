@@ -122,22 +122,30 @@ it('shows the account each CLI signs in as, and keeps a saved CLI on screen whil
 
 it('points a setup problem at the settings that fix it', async () => {
   server.setup = { ...server.setup, problem: problemOf('agentCliUnset'), accounts: null }
-  // jsdom has no scrolling; mock scrollIntoView to record which card the link brings into view.
-  const scroll = vi.fn()
-  Element.prototype.scrollIntoView = scroll
-  await mount()
-  expect(text()).toContain(zh.problemSetup)
-  expect(text()).toContain(zh['setup.agentCliUnset'])
-  // Nothing runs while setup waits, so the Executor says so instead of counting.
-  expect(text()).toContain(zh.executorWaitingSetup)
-  expect(all('.dt-stat').map(stat => stat.textContent)).not.toContain('执行中2 / 3')
-  expect(text()).toContain('在设置 › 来源的 GitHub 卡片修正后保存，会重新检查')
-  await click(find(zh.problemSetup, 'button, a, [role="button"]'))
-  expect(tab(zh['tab.settings']).getAttribute('aria-selected')).toBe('true')
-  expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(zh['term.source'])
-  expect(all('.dt-card')[1]!.textContent).toContain('部署检查未通过：没有设置智能体的 GitHub CLI。')
-  expect(scroll.mock.contexts).toContain(all('.dt-card')[1])
-  delete (Element.prototype as Partial<Element>).scrollIntoView
+  // jsdom has no layout. Record which card the link scrolls inside the panel column.
+  const seen: HTMLElement[] = []
+  const rect = HTMLElement.prototype.getBoundingClientRect
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    const box = rect.call(this)
+    if (this.classList.contains('dt-card')) { seen.push(this); return { ...box, top: 320, height: 40, bottom: 360 } }
+    if (this.classList.contains('dt-column')) return { ...box, top: 0, height: 100, bottom: 100 }
+    return box
+  }
+  try {
+    await mount()
+    expect(text()).toContain(zh.problemSetup)
+    expect(text()).toContain(zh['setup.agentCliUnset'])
+    // Nothing runs while setup waits, so the Executor says so instead of counting.
+    expect(text()).toContain(zh.executorWaitingSetup)
+    expect(all('.dt-stat').map(stat => stat.textContent)).not.toContain('执行中2 / 3')
+    expect(text()).toContain('在设置 › 来源的 GitHub 卡片修正后保存，会重新检查')
+    await click(find(zh.problemSetup, 'button, a, [role="button"]'))
+    expect(tab(zh['tab.settings']).getAttribute('aria-selected')).toBe('true')
+    expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(zh['term.source'])
+    expect(all('.dt-card')[1]!.textContent).toContain('部署检查未通过：没有设置智能体的 GitHub CLI。')
+    expect(seen).toContain(all('.dt-card')[1])
+    expect(document.querySelector<HTMLElement>('.dt-column')?.scrollTop).toBe(320)
+  } finally { HTMLElement.prototype.getBoundingClientRect = rect }
   await click(find(zh['settingsGroup.deployment'], '.dt-settings-link'))
   expect(text()).toContain('部署检查未通过：没有设置智能体的 GitHub CLI。')
   // After a fix outside dsh-superagent, a check runs setup again.
@@ -215,6 +223,17 @@ it('shows a refused Source save with the output of the tool that failed on its o
   await type(field<HTMLInputElement>('机器人的 lark-cli'), 'lark-broken')
   await act(async () => { feishu.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
   expect(feishu.querySelector('.dt-savebar [role="alert"]')?.textContent).toBe('机器人的 lark-cli 不可用。\nlark-cli: app secret missing')
+})
+
+it('points at the Source card from another settings group while setup is incomplete', async () => {
+  server.setup = { ...server.setup, problem: problemOf('agentCliUnset'), accounts: null }
+  at({ page: 'settings', query: { group: 'prompts' } })
+  await mount()
+  const banner = document.querySelector('.dt-settings .dt-banner')
+  expect(banner?.textContent).toContain(zh['setup.agentCliUnset'])
+  await click(banner!.querySelector('button')!)
+  expect(document.getElementById('dt-source-github')?.textContent).toContain(zh['setup.agentCliUnset'])
+  expect(document.querySelector('.dt-settings .dt-banner')).toBeNull()
 })
 
 it('shows a setup problem on its Source card within one read of the settings, which the settings groups share', async () => {

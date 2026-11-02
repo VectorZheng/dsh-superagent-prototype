@@ -55,4 +55,14 @@ Search also finds Threads by references such as `#12` or a GitHub URL, and Ticke
 4. **Domain structure.** The panel uses the domain terms. Internal identifiers appear only in folded details, and names replace identifiers where they can be resolved.
 5. **Honest state.** A count equals the length of the list it links to, and no state contradicts another fact.
 6. **Quiet by default.** Healthy states take no extra space. Problems must be actionable; a one-off network error is not enough. Rows needing a person offer their action directly. Keep page explanations to one sentence and put further detail in the (?) tooltip. Destructive actions require confirmation.
-7. **Consistent controls.** Use DeepSeek Harness design tokens and control behavior. The same information should look the same throughout the panel. Each settings block has one save bar, visible only while changes exist, a save runs or a save fails.
+7. **Consistent controls.** The panel uses one Neo-Brutalist treatment: square corners, black hard borders, hard offset shadows, and the same accent colors on every control. The same information should look the same throughout the panel. Each settings block has one save bar, visible only while changes exist, a save runs or a save fails. Harness draws the window frame, the sidebar list and the Plugin Manager shell; those stay on host chrome.
+
+## Appearance
+
+Opening **Superagent** in the DeepSeek Harness web sidebar loads this panel. It calls the management API at `/orchestrator/api/` (the contract in `src/app/api.ts`) with the header `x-orchestrator-request: 1`. The page origin must be `localhost` or `127.0.0.1`; the deployment document states the host check.
+
+The surface is Neo-Brutalist, matching the panel mock: square corners, black borders, shadows of the form `Npx Npx 0 0`, black and white plus `#ff006e`, `#ffff00`, `#ccff00` and `#00d9ff` (warning marks also use `#ff9500`). Headings use a heavy display face. Body text is monospace. Hover eases out in 150ms and shifts the control up and left (Brutal Snap). Pressing translates it by its resting shadow offset and clears the shadow (Physical Crushing). Faces are the system stack from the mock (Arial Black / Impact, Courier New). The panel does not load a third-party font.
+
+The stylesheet does not restyle Harness chrome: the window frame (including `--dsh-frame-top-clearance`), the sidebar panel list around the Superagent entry, or the Plugin Manager shell around Deployment. The Deployment block inside that shell uses the same tokens.
+
+The panel is viewport-locked. `.dt-page` is a flex column with `overflow: hidden`, so the Harness page does not grow a document scrollbar. The column inside it scrolls, including sticky save bars. A jump to a tab, a Source card, a history row, or a Trigger scrolls that column or the tab strip, not the host page. While setup is incomplete, any Settings group other than the one that fixes it shows the problem and a link to that group. The management routes answer during the first account probe, so Settings can be saved before startup finishes.
