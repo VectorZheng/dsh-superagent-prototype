@@ -29,6 +29,7 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
+- [009 Neo standalone](docs/009-neo-standalone.md): independent demo page and its Vite proxy
 
 ## Panel
 
@@ -39,6 +40,20 @@ The panel reads and writes the management API at `/orchestrator/api/` on `localh
 The panel surface is Neo-Brutalist (square corners, hard black borders and offset shadows, high-contrast black and white with pink, yellow, acid and cyan). The Harness window frame, sidebar list and Plugin Manager shell stay on host chrome and are not overridden. The page is viewport-locked: `.dt-page` hides overflow and the column scrolls inside it. Overview, Execution and Settings call the existing routes, including `GET state`, `POST executor/pause`, `POST tickets/:id/retry`, `POST tickets/:id/stop` and `PUT settings/:block`, each with `x-orchestrator-request: 1`. Those routes answer during the first account probe, so Settings can fix setup before startup finishes.
 
 To smoke it on profile `superagent`: `pnpm check`, then `scripts/dsh-superagent --profile superagent status`, then open `http://127.0.0.1:3082/` and choose **Superagent**. [006 Deployment](docs/006-deployment.md) has the checklist, including a direct `dsh --profile superagent` start where `tmux` is unavailable.
+
+## Neo demo
+
+`apps/neo-standalone` is a separate static page. Vite on `http://127.0.0.1:5179` proxies `/orchestrator` to Host at `http://127.0.0.1:3082`. The page calls relative `/orchestrator/api/*` only. [009 Neo standalone](docs/009-neo-standalone.md) describes the page. [009a Vite proxy](docs/009a-vite-proxy.md) is the proxy freeze.
+
+Start Host on port 3082, then:
+
+```sh
+cd apps/neo-standalone
+pnpm install
+pnpm dev
+```
+
+Open `http://127.0.0.1:5179/`. After that install, `pnpm neo:dev` from the repo root runs the same dev server (`pnpm --dir apps/neo-standalone dev`). Smoke steps for state and overview are in `apps/neo-standalone/README.md`.
 
 ## Development
 

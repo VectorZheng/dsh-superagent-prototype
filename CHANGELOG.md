@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `apps/neo-standalone` is an independent Neo demo. Vite on `127.0.0.1:5179` proxies `/orchestrator` to Host `http://127.0.0.1:3082` with `changeOrigin` and a `proxyReq` hook that sets `x-orchestrator-request: 1` and `Origin: http://127.0.0.1:3082`. The page calls relative `/orchestrator/api/*` only. [009 Neo standalone](docs/009-neo-standalone.md) and [009a Vite proxy](docs/009a-vite-proxy.md).
+
 ### Fixed
 
 - Management routes at `/orchestrator/api/` answer before startup's `ready` promise. A slow or failed account probe no longer leaves the Superagent panel on "loading", so first-run Settings can save the GitHub (and Feishu) Source, Policy, and Execution blocks.
