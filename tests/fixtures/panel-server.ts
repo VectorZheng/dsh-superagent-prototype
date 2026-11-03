@@ -150,7 +150,9 @@ function sourceStatuses(): SourceStatusRow[] {
     const state = !enabled ? 'off' : problem || health.some(item => item.state === 'error') ? 'error' : server.setup.problem ? 'setup'
       : health.some(item => item.state === 'starting') ? 'starting' : health.some(item => item.state === 'paused') ? 'paused' : 'ready'
     const feishu = kind.kind === 'feishu'
-    return { id: kind.kind, title: kind.title, installed: true, enabled, state, health, ...problem ? { problem } : {},
+    const retryPoll = !!kind.pollRetry && enabled && !problem && !server.setup.problem
+      && health.some(item => item.state === 'error' && item.code === 'pollFailures')
+    return { id: kind.kind, title: kind.title, installed: true, enabled, state, health, retryPoll, ...problem ? { problem } : {},
       stats: { received: feishu ? 12 : 0, filtered: feishu ? 2 : 0, lastAt: '2026-09-23T00:00:00Z' },
       filtered: feishu ? [] : [{ id: 'e9', at: '2026-09-23T00:02:00Z', actor: actor('github', 'someone'), preview: 'looks wrong',
         reason: { code: 'source_disabled' } }],
@@ -184,7 +186,10 @@ const overviewView = (): ApiResponse<'GET overview'> => {
       ...KINDS.some(kind => server.settings.sources[kind.kind]?.enabled !== false) ? [] : [{ kind: 'no-source' as const }],
       ...feishuProblem || server.settings.sources.feishu?.enabled === false ? [] : [{ kind: 'source-error' as const, source: { id: 'feishu',
         title: { zh: '飞书', en: 'Feishu' },
-        health: { name: 'feishu', state: 'error' as const, detail: 'socket closed' } } }],
+        health: { name: 'feishu', state: 'error' as const, detail: 'socket closed' }, retryPoll: false } }],
+      ...server.health.github?.state === 'error' && server.health.github.code === 'pollFailures' ? [{ kind: 'source-error' as const,
+        source: { id: 'github', title: { zh: 'GitHub', en: 'GitHub' }, health: { name: 'github', ...server.health.github },
+          retryPoll: true } }] : [],
       ...server.threads.filter(thread => thread.evaluating && thread.evaluating.deadline < new Date().toISOString())
         .map(thread => ({ kind: 'eval-overdue' as const, thread })),
       { kind: 'eval-unavailable' as const, decisionId: 'u1', thread: threadSummary(), reason: [{ code: 'timeout' }], triggerId: 'e3' },
@@ -300,6 +305,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'GET sources': { answer: sourceStatuses },
   'GET settings': { answer: settingsView },
+  'POST sources/:id/poll': { answer: ({ params }) => params.id === 'github' ? { polling: true } : refuse(404, 'Source not found') },
   'POST sources/:id/labels': { answer: () => {
     // Label refresh failures come from the bot CLI and are returned verbatim.
     if (server.joinError) return refuse(500, server.joinError)

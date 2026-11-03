@@ -29,6 +29,21 @@ export async function pollThreads(ctx: SourceContext, source: string, stopped: (
     }
   }
 }
+const pollRequests = new Map<string, Set<() => void>>()
+/** Registers `wake` until the returned function runs. A Source's poll loop uses it to leave its interval early. */
+export function onPollRequest(kind: string, wake: () => void): () => void {
+  const waits = pollRequests.get(kind) ?? new Set()
+  waits.add(wake)
+  pollRequests.set(kind, waits)
+  return () => { waits.delete(wake); if (waits.size === 0) pollRequests.delete(kind) }
+}
+/** Asks `kind`'s poll loop to run again without waiting out its interval. False when that loop is not running. */
+export function requestPoll(kind: string): boolean {
+  const waits = pollRequests.get(kind)
+  if (!waits?.size) return false
+  for (const wake of waits) wake()
+  return true
+}
 /** Waits `ms` or until `signal` aborts using global `setTimeout` so test fake timers can drive polling loops. */
 export function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise(resolve => {

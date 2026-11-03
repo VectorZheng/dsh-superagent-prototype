@@ -12,7 +12,7 @@ import type { GithubComment, PullRef } from './github-trigger.ts'
 import { observePull, pullsOf, readPull, type Pull } from './github-pull.ts'
 import { health, sourceContext, type Health, type SourceContext } from './host.ts'
 import { KV } from '../kv.ts'
-import { cursorAt, pause, POLL_HORIZON_MS, pollThreads as pollEach } from './poll.ts'
+import { cursorAt, onPollRequest, pause, POLL_HORIZON_MS, pollThreads as pollEach } from './poll.ts'
 import type { Localized, SourceKind } from './kind.ts'
 import { z } from 'zod'
 
@@ -44,9 +44,9 @@ export const githubKind: SourceKind<GithubConfig> = {
     { key: 'repository', type: 'text', pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', label: { zh: '监听的仓库', en: 'Repository' },
       hint: { zh: '写作 owner/name。这个来源接收这个仓库的通知和讨论；保存时检查智能体账号能否推送到它，然后重启 dsh-superagent。', en: 'Written owner/name. This Source receives the repository\'s notifications and discussion; saving checks that the agent account can push to it, then restarts dsh-superagent.' } },
     { key: 'cli', type: 'text', label: { zh: '智能体的 GitHub CLI', en: 'Agent GitHub CLI' },
-      hint: { zh: '命令名或绝对路径，通常是用 GH_CONFIG_DIR 登录智能体账号的 gh 包装脚本。智能体以它登录的账号行事，执行器以 gh 调用它。保存时检查它登录的账号能否推送到仓库，然后重启 dsh-superagent。', en: 'A command name or absolute path, usually a gh wrapper signed in to the agent account through GH_CONFIG_DIR. The agent acts as the account it is signed in to, and the Executor calls it as gh. Saving checks that this account can push to the repository, then restarts dsh-superagent.' } },
+      hint: { zh: '命令名或绝对路径，通常是用 GH_CONFIG_DIR 登录智能体账号的 gh 包装脚本。Windows 上的 .cmd 或 .bat 包装会经 cmd.exe 运行。智能体以它登录的账号行事，执行器以 gh 调用它。保存时检查它登录的账号能否推送到仓库，然后重启 dsh-superagent。', en: 'A command name or absolute path, usually a gh wrapper signed in to the agent account through GH_CONFIG_DIR. On Windows a .cmd or .bat wrapper runs through cmd.exe. The agent acts as the account it is signed in to, and the Executor calls it as gh. Saving checks that this account can push to the repository, then restarts dsh-superagent.' } },
     { key: 'pollSeconds', type: 'number', advanced: true, min: 60, max: 3600, label: { zh: '轮询间隔 / 秒', en: 'Polling interval / seconds' }, hint: { zh: 'GitHub 要求更长间隔时以 GitHub 为准。', en: 'A longer interval requested by GitHub wins.' } },
-    { key: 'failuresBeforeError', type: 'number', advanced: true, min: 1, max: 20, label: { zh: '连续失败几次后报告异常', en: 'Failed polls before reporting an error' }, hint: { zh: '单次网络中断会在下一次轮询时自动重试，不必报告。', en: 'A single network interruption is retried on the next poll and need not be reported.' } },
+    { key: 'failuresBeforeError', type: 'number', advanced: true, min: 1, max: 20, label: { zh: '连续失败几次后报告异常', en: 'Failed polls before reporting an error' }, hint: { zh: '单次网络中断会在下一次轮询时自动重试，不必报告。报告异常后，来源页可以立即重新发送这一次请求。', en: 'A single network interruption is retried on the next poll and need not be reported. Once an error is reported, the Source page can send that request again immediately.' } },
     { key: 'observeIssues', type: 'switch', label: { zh: '接收仓库里的新 Issue', en: 'Receive new Issues in the repository' },
       hint: { zh: '打开后，没有 @ 智能体的新 Issue 也会收到，由策略的接收表决定是否成为候选。从打开的时候开始，不读以前的。', en: 'New Issues that do not mention the agent are received too, and the Policy\'s admission table decides whether they become candidates. Starts when switched on; earlier ones are not read.' } },
     { key: 'observePulls', type: 'switch', label: { zh: '接收仓库里的新 PR', en: 'Receive new pull requests in the repository' },
@@ -61,6 +61,7 @@ export const githubKind: SourceKind<GithubConfig> = {
     return { listened: true, observed: row !== undefined && config[OBSERVED[row]], ...row ? { row } : {} }
   },
   health: ['github'],
+  pollRetry: true,
   channel: { send: sendGithub, link: githubLink },
   threadContext: githubThreadContext,
   // `#12`, `12`, or the page of an Issue or PR, of any repository, names Thread 12.
@@ -127,22 +128,36 @@ export function pollFailure(failures: number, threshold: number, error: unknown)
 async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   let interval = 60
   let failures = 0
-  await ctx.ready
-  // Setup restarts dsh-superagent once it resolves the accounts; until then nothing is polled.
-  if (!ctx.configured()) { ctx.report('github', health('paused', 'setupPending')); return }
-  while (!signal.aborted) {
-    const config = ctx.config<GithubConfig>(SOURCE)
-    try {
-      if (config) interval = await pollRound(ctx, signal)
-      else ctx.report('github', health('paused', 'sourceOff'))
-      failures = 0
-    } catch (error) {
-      failures += 1
-      const failed = pollFailure(failures, config?.failuresBeforeError ?? 1, error)
-      if (!signal.aborted && failed) ctx.report('github', failed)
+  let attempt = 0
+  let waiting: AbortController | undefined
+  // A manual retry drops this streak and leaves the interval wait so the next poll runs at once.
+  const stopListening = onPollRequest(SOURCE, () => { failures = 0; attempt += 1; waiting?.abort() })
+  try {
+    await ctx.ready
+    // Setup restarts dsh-superagent once it resolves the accounts; until then nothing is polled.
+    if (!ctx.configured()) { ctx.report('github', health('paused', 'setupPending')); return }
+    while (!signal.aborted) {
+      const config = ctx.config<GithubConfig>(SOURCE)
+      const current = attempt
+      try {
+        if (config) interval = await pollRound(ctx, signal)
+        else ctx.report('github', health('paused', 'sourceOff'))
+        if (current === attempt) failures = 0
+      } catch (error) {
+        if (signal.aborted) return
+        // A retry asked for during this round replaces it; that failure does not extend the streak.
+        if (current !== attempt) continue
+        failures += 1
+        const failed = pollFailure(failures, config?.failuresBeforeError ?? 1, error)
+        if (failed) ctx.report('github', failed)
+      }
+      if (signal.aborted) return
+      if (current !== attempt) continue
+      waiting = new AbortController()
+      await pause(Math.max(interval, ctx.config<GithubConfig>(SOURCE)?.pollSeconds ?? 60) * 1000, AbortSignal.any([signal, waiting.signal]))
+      waiting = undefined
     }
-    await pause(Math.max(interval, ctx.config<GithubConfig>(SOURCE)?.pollSeconds ?? 60) * 1000, signal)
-  }
+  } finally { stopListening() }
 }
 interface Round {
   started: string; signal?: AbortSignal | undefined

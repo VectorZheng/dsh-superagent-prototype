@@ -130,6 +130,13 @@ export function PageHead({ title, children }: { title: ReactNode; children?: Rea
     <div className="dt-page-title"><h2>{title}</h2>{children && <span className="dt-actions">{children}</span>}</div>
   </div>
 }
+/** Ask a Source to run its poll again now. The host wakes the loop; it does not restart dsh-superagent. */
+export function PollRetryButton({ id, reload }: { id: string; reload?: () => Promise<unknown> }) {
+  const { t, call, notify } = usePanel()
+  const action = useAction(async () => { await call('POST sources/:id/poll', { id }); notify(t('sourcePollRetrying')) }, { reload })
+  return <Button variant="outline" size="sm" icon={<Icon name="refresh" size={14} />} disabled={action.busy}
+    onClick={() => { void action.run() }}>{t('sourcePollRetry')}</Button>
+}
 /** Trigger a host setup re-check and restart, prompting for confirmation when running Assignments would be interrupted. */
 export function CheckSetupButton() {
   const { t, call, notify, restart } = usePanel()

@@ -11,7 +11,7 @@ import { ciCounts, ciFact, ciSummary } from '../src/sources/github-read.ts'
 import { apply as applyGithub, githubKind, pollFailure, pollRound } from '../src/sources/github.ts'
 import { pollThreads as pollGithubThreads } from '../src/sources/github.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
-import { cursorAt, POLL_HORIZON_MS } from '../src/sources/poll.ts'
+import { cursorAt, POLL_HORIZON_MS, requestPoll } from '../src/sources/poll.ts'
 import { Store } from '../src/app/store.ts'
 import { Commands, commandError } from '../src/infra/commands.ts'
 import { HealthBoard } from '../src/infra/health.ts'
@@ -799,6 +799,50 @@ describe('github source', () => {
       await until(4)
       await vi.waitFor(() => expect(flaky.value.health.github).toMatchObject({ state: 'error', code: 'pollFailures', values: { count: '2' } }))
       await flaky.stop()
+      run.mockRestore()
+    } finally { vi.useRealTimers() }
+  })
+  it('sends another poll as soon as it is asked, and starts the failure count over', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const start = async (overrides: Partial<SourceContextDeps> = {},
+        github: { enabled: boolean; config: Record<string, unknown> } = { enabled: true, config: {} }) => {
+        const board = new HealthBoard()
+        const settings = SettingsSchema.parse({ sources: { github } })
+        const sources = new SourceRegistry(() => settings, board)
+        healthOf.set(sources, board)
+        const value = host({ sources, ...overrides })
+        const disposers: (() => unknown)[] = []
+        applyGithub({ orchestrator: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
+        return { value, stop: async () => { for (const dispose of disposers) await dispose(); value.store.close() } }
+      }
+      const pending = await start({ configured: () => false })
+      await vi.waitFor(() => expect(pending.value.health.github).toMatchObject({ code: 'setupPending' }))
+      expect(requestPoll('github')).toBe(false)
+      await pending.stop()
+      let round = 0
+      const run = vi.spyOn(Commands.prototype, 'run').mockImplementation(async () => {
+        round += 1
+        throw refused(502, 'Bad Gateway')
+      })
+      const flaky = await start({}, { enabled: true, config: { failuresBeforeError: 2 } })
+      const until = async (count: number) => {
+        while (round < count) {
+          await vi.waitFor(() => expect(round).toBeGreaterThan(0))
+          if (round < count) await vi.advanceTimersByTimeAsync(60_000)
+        }
+      }
+      await until(2)
+      await vi.waitFor(() => expect(flaky.value.health.github).toMatchObject({ state: 'error', code: 'pollFailures', values: { count: '2' } }))
+      expect(requestPoll('github')).toBe(true)
+      // The wait is aborted, so the next poll does not need the minute interval.
+      await vi.waitFor(() => expect(round).toBe(3))
+      expect(flaky.value.health.github).toMatchObject({ code: 'pollFailures', values: { count: '2' } })
+      run.mockImplementation(async () => 'HTTP/2.0 200 OK\r\n\r\n[]')
+      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.waitFor(() => expect(flaky.value.health.github).toMatchObject({ state: 'ready' }))
+      await flaky.stop()
+      expect(requestPoll('github')).toBe(false)
       run.mockRestore()
     } finally { vi.useRealTimers() }
   })

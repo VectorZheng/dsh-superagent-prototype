@@ -7,6 +7,42 @@ import type { Deployment } from '../deployment.ts'
 
 const exec = promisify(execFile)
 const TIMEOUT_MS = 90_000
+/** Windows cannot `CreateProcess` a batch file; `spawn`/`execFile` then fail with `EINVAL`. */
+const WINDOWS_BATCH = /\.(?:cmd|bat)$/i
+/** Characters `cmd.exe` treats specially. Escaped after quoting so they stay inside the argument. */
+const CMD_META = /([()\][%!^"`<>&|;, *?])/g
+
+/**
+ * Escapes a program path for `cmd.exe /c` without quoting it, so `^` keeps spaces and metacharacters in one token.
+ * Argument escaping is separate: a quoted argument is what the batch file receives.
+ */
+function escapeCmdCommand(value: string): string {
+  return value.replace(CMD_META, '^$1')
+}
+/**
+ * Quotes one argument for `cmd.exe` so metacharacters stay literal.
+ * The algorithm is the one `cross-spawn` uses for `cmd.exe /d /s /c` (backslash-quote rules, then caret escapes).
+ * The lookahead form avoids a backtracking hang on a long run of backslashes.
+ */
+function escapeCmdArgument(value: string): string {
+  let arg = `${value}`
+  arg = arg.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
+  arg = arg.replace(/(?=(\\+?)?)\1$/, '$1$1')
+  arg = `"${arg}"`
+  return arg.replace(CMD_META, '^$1')
+}
+export interface CommandLaunch { file: string; args: string[]; windowsVerbatimArguments?: true }
+/**
+ * How to run `program`. On Windows a `.cmd` or `.bat` file is started through `cmd.exe /d /s /c` with each argument
+ * escaped, because `shell: true` would join argv unsafely and `CreateProcess` rejects batch files with `EINVAL`.
+ * Everywhere else the program and argv are passed through unchanged.
+ */
+export function commandLaunch(program: string, args: readonly string[], platform = process.platform): CommandLaunch {
+  if (platform !== 'win32' || !WINDOWS_BATCH.test(program)) return { file: program, args: [...args] }
+  const command = [escapeCmdCommand(program), ...args.map(escapeCmdArgument)].join(' ')
+  return { file: process.env.ComSpec || process.env.comspec || 'cmd.exe', args: ['/d', '/s', '/c', `"${command}"`],
+    windowsVerbatimArguments: true }
+}
 /**
  * Error thrown by Commands when a CLI invocation fails, capturing stderr diagnostics, API error codes, and exit status without echoing command arguments.
  * Source channels and pollers inspect its code to distinguish deleted conversations from retryable failures.
@@ -66,8 +102,11 @@ export class Commands {
   get repository(): string { return this.deployment.repository }
   withSignal(signal?: AbortSignal): Commands { return signal ? new Commands(this.resolved, this.environment, AbortSignal.any([this.signal, signal])) : this }
   async run(program: string, args: string[], cwd?: string): Promise<string> {
+    // Keep the caller's program in the error text (`gh-agent.cmd could not run`) even when Windows runs it via cmd.exe.
+    const launch = commandLaunch(program, args)
     try {
-      const { stdout } = await exec(program, args, { cwd, signal: this.signal, timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
+      const { stdout } = await exec(launch.file, launch.args, { cwd, signal: this.signal, timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
+        ...launch.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {},
         env: { ...process.env, ...this.environment, GH_PROMPT_DISABLED: '1', LARKSUITE_CLI_NO_UPDATE_NOTIFIER: '1', LARKSUITE_CLI_NO_SKILLS_NOTIFIER: '1' } })
       return stdout
     } catch (error) { throw commandError(error, program) }

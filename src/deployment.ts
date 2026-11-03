@@ -6,6 +6,7 @@ import type { Volatile } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
+import { commandLaunch } from './infra/commands.ts'
 import { runAsWorker, sameDirectory, withoutDirectory, workerBin } from './infra/environment.ts'
 import { SetupError } from './setup.ts'
 
@@ -69,10 +70,23 @@ export function executable(name: string, path: string, exclude?: string): string
 }
 
 export type Probe = (argv: string[]) => Promise<string>
+/**
+ * Argv of a setup probe. Unix runs `env PATH=... command` so the CLI sees a PATH without the worker shims.
+ * On Windows a `.cmd`/`.bat` CLI cannot be the target of `CreateProcess` (`EINVAL`), and `env` would hit the same wall
+ * when it starts the wrapper, so the probe runs that CLI through `cmd.exe` after setting PATH in the command.
+ */
+export function probeArgv(path: string, argv: readonly string[], platform = process.platform): string[] {
+  const [program, ...args] = argv
+  if (platform !== 'win32' || !program || !/\.(?:cmd|bat)$/i.test(program)) return ['env', `PATH=${path}`, ...argv]
+  const launch = commandLaunch(program, args, 'win32')
+  const body = launch.args[3]!.slice(1, -1)
+  const pathSet = path.replaceAll('%', '%%').replaceAll('"', '')
+  return [launch.file, '/d', '/s', '/c', `"set "PATH=${pathSet}"& ${body}"`]
+}
 /** Run startup checks through DSH's worker subprocess service with worker shims removed from PATH so a `gh` wrapper script reaches the real binary. */
 export function workerProbe(subprocess: SubprocessRuntime, stateDir: string, cwd: string, signal: AbortSignal): Probe {
   const path = withoutDirectory(process.env.PATH ?? '', workerBin(stateDir))
-  return argv => runAsWorker(subprocess, ['env', `PATH=${path}`, ...argv], cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+  return argv => runAsWorker(subprocess, probeArgv(path, argv), cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
 }
 
 const GithubUser = z.object({ login: z.string().regex(/^[A-Za-z0-9-]+$/), id: z.number().int().positive() })

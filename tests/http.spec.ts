@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { registerHttp } from '../src/app/http.ts'
+import { onPollRequest } from '../src/sources/poll.ts'
 import { PromptConflict } from '../src/app/prompts.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
 import type { HttpHost } from '../src/app/http.ts'
@@ -65,6 +66,17 @@ it('decodes path parameters and parses each route\'s query', async () => {
   // Invalid offsets default to 0, and limits above the route maximum are clamped.
   expect(await call('GET', 'decisions?kind=accept%2Creopen&limit=500&offset=x&window=24h')).toEqual({ status: 200, body: { items: [], next_offset: null } })
   expect(seen).toEqual(['feishu:oc_1:om/root', { filter: { kinds: ['accept', 'reopen'], since: expect.any(String) }, offset: 0, limit: 200 }])
+})
+
+it('wakes a Source that is polling and refuses one that is not', async () => {
+  let woke = 0
+  const stop = onPollRequest('github', () => { woke += 1 })
+  const call = serve({ sources: { instances: () => [{ id: 'github' }, { id: 'feishu' }] } })
+  expect(await call('POST', 'sources/github/poll')).toEqual({ status: 200, body: { polling: true } })
+  expect(woke).toBe(1)
+  stop()
+  expect(await call('POST', 'sources/github/poll')).toMatchObject({ status: 400, body: { code: 'sourceNotPolling', values: { source: 'github' } } })
+  expect(await call('POST', 'sources/missing/poll')).toEqual({ status: 404, body: { error: 'Source not found' } })
 })
 
 it('answers only a same-origin request from the panel on the loopback address', async () => {

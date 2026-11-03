@@ -26,6 +26,18 @@ it('leads the overview with the pending Tickets, then problems, the last day and
   expect(tab(zh['tab.execution']).getAttribute('aria-selected')).toBe('true')
 })
 
+it('sends the GitHub poll again from a poll-failure problem without restarting', async () => {
+  server.health = { github: { state: 'error', detail: '3 consecutive failed polls; last: EOF', code: 'pollFailures', values: { count: '3',
+    error: 'EOF' } } }
+  await mount()
+  expect(text()).toContain('连续 3 次轮询失败，最近一次：EOF')
+  expect(text()).not.toContain(zh.setupChecking)
+  await click(zh.sourcePollRetry)
+  expect(server.requests.some(request => request.method === 'POST' && request.path === 'sources/github/poll')).toBe(true)
+  expect(server.requests.some(request => request.path === 'setup/check')).toBe(false)
+  expect(text()).toContain(zh.sourcePollRetrying)
+})
+
 it('re-evaluates or dismisses an unjudged Eval from the problem list', async () => {
   await mount()
   await click(zh.requeue)

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, executable, machineOf, resolveDeployment, resolveFeishuBot, type Machine, type Probe } from '../src/deployment.ts'
+import { Config, executable, machineOf, probeArgv, resolveDeployment, resolveFeishuBot, type Machine, type Probe } from '../src/deployment.ts'
 import { gitEnv } from './fixtures/git.ts'
 
 const exec = promisify(execFile)
@@ -98,4 +98,13 @@ describe('setup', () => {
     program(join(dir, 'bin', 'lark-cli'), 'echo "not configured" >&2; exit 1')
     await refuses('feishuCliFailed', { output: expect.stringContaining('not configured') })
   })
+})
+
+it('probes a Windows batch CLI through cmd.exe and leaves every other CLI on env', () => {
+  const cli = 'C:\\Tools\\gh-agent.cmd'
+  expect(probeArgv('/usr/bin', ['/opt/gh', 'api', 'user'], 'linux')).toEqual(['env', 'PATH=/usr/bin', '/opt/gh', 'api', 'user'])
+  expect(probeArgv('C:\\bin', ['C:\\Tools\\gh.exe', 'api', 'user'], 'win32')).toEqual(['env', 'PATH=C:\\bin', 'C:\\Tools\\gh.exe', 'api', 'user'])
+  const shell = process.env.ComSpec || process.env.comspec || 'cmd.exe'
+  expect(probeArgv('C:\\bin%SystemRoot%', [cli, 'api', 'user'], 'win32')).toEqual([shell, '/d', '/s', '/c',
+    `"set "PATH=C:\\bin%%SystemRoot%%"& ${cli} ^"api^" ^"user^""`])
 })

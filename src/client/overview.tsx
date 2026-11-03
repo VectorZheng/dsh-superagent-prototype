@@ -6,7 +6,7 @@ import { useAction, usePanel, usePanelData } from './provider.tsx'
 import { setupPage, settingsRoute, type Route } from './route.ts'
 import { TicketLine } from './rows.tsx'
 import { healthText, localized, reasonLabel, valueLabel, readableMarkers } from './text.ts'
-import { CheckSetupButton, ConfirmButton, Hint, LoadState, Section, SetupMessage } from './widgets.tsx'
+import { CheckSetupButton, ConfirmButton, Hint, LoadState, PollRetryButton, Section, SetupMessage } from './widgets.tsx'
 
 function ProblemLine({ problem, onChanged }: { problem: Problem; onChanged: () => Promise<void> }) {
   const { t, call, navigate } = usePanel()
@@ -39,8 +39,9 @@ function ProblemLine({ problem, onChanged }: { problem: Problem; onChanged: () =
     case 'runtime-error': return row(t('problemRuntime', { name: valueLabel(t, 'health', problem.name) }), raw(problem.detail), undefined)
     case 'source-error': {
       const health = problem.source.health
+      const retry = problem.source.retryPoll ? <PollRetryButton id={problem.source.id} reload={onChanged} /> : undefined
       return row(t('sourceError', { source: localized(t, problem.source.title) }), health.code ? worded(healthText(t, health))
-        : raw(health.detail), { page: 'source' }, t('sourceErrorHint'))
+        : raw(health.detail), { page: 'source' }, t('sourceErrorHint'), retry)
     }
     case 'eval-overdue': return row(t('problemEvalOverdue', { thread: readableMarkers(t, problem.thread.title) }), undefined, { page: 'trigger',
       id: problem.thread.key })

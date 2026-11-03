@@ -17,7 +17,12 @@ export function sourceHealth(sources: SourceRegistry, instance: SourceInstance, 
     const entry = health[name]
     return { name, ...(!entry || (instance.enabled && entry.code === 'sourceOff') ? starting : entry) }
   })
-  return { id: instance.id, title: kind?.title ?? { zh: instance.id, en: instance.id }, health: parts }
+  return { id: instance.id, title: kind?.title ?? { zh: instance.id, en: instance.id }, health: parts,
+    retryPoll: offersPollRetry(kind, parts) }
+}
+/** True when this kind can run a poll immediately and one of its parts is a consecutive-poll failure. */
+export function offersPollRetry(kind: { pollRetry?: boolean } | undefined, parts: readonly { state: string; code?: string }[]): boolean {
+  return kind?.pollRetry === true && parts.some(part => part.state === 'error' && part.code === 'pollFailures')
 }
 export interface SetupState {
   /** Resolved deployment facts; undefined while waiting for initial setup. */
@@ -50,7 +55,10 @@ export function sourcesStatus(host: ViewHost, health: HealthMap, setup: SetupSta
   return sources.instances().map(instance => {
     const { health: parts, ...named } = sourceHealth(sources, instance, health)
     const problem = problemOf(instance.id, setup)
+    const kind = sources.kind(instance.kind)
     return { ...named, installed: instance.installed, enabled: instance.enabled, state: sourceState(instance, parts, setup), health: parts,
+      // A global or source setup problem already explains why nothing is polling; the retry control would have nothing to wake.
+      retryPoll: instance.enabled && !problem && !setup.problem && offersPollRetry(kind, parts),
       ...problem ? { problem } : {}, stats: stats[instance.id] ?? { received: 0, filtered: 0, lastAt: '' }, filtered: filtered(instance.id),
       dropped: dropped.filter(item => item.channel.source === instance.id) }
   })

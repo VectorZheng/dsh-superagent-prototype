@@ -165,6 +165,8 @@ const TEXT = {
   'sourceState.warning': ['待处理', 'Pending'],
   'sourceState.error': ['出错', 'Failing'],
   sourceOpenSettings: ['去设置', 'Open settings'],
+  sourcePollRetry: ['重新发送请求', 'Send the request again'],
+  sourcePollRetrying: ['正在重新发送这一次轮询请求。', 'Sending this poll request again.'],
   'sourceState.setup': ['等待部署检查', 'Waiting for the deployment check'],
   setupFixLink: ['去修正', 'Fix it'],
   'openSettingsOf.deployment': ['去部署页修改', 'Change it on Deployment'],
@@ -724,6 +726,7 @@ const TEXT = {
   'userError.sourceNotInstalled': ['{source} 来源的插件没有安装。', USER_ERRORS.sourceNotInstalled[1]],
   'userError.noLabels': ['这个来源没有可以刷新的名称。', USER_ERRORS.noLabels[1]],
   'userError.nothingToSync': ['{source} 来源上的策略没有指定从哪里同步，或者这个来源已关闭或在等待部署检查。', USER_ERRORS.nothingToSync[1]],
+  'userError.sourceNotPolling': ['{source} 来源当前没有在轮询，无法重新发送请求。', USER_ERRORS.sourceNotPolling[1]],
   // Setup problems and health codes; English reuses the host's own text read by the log and main Session
   'setup.repositoryUnset': ['GitHub 来源没有设置监听的仓库。', SETUP_PROBLEMS.repositoryUnset[1]],
   'setup.foreignFile': ['{file} 不是 dsh-superagent 写入的文件；移走它，或换一个状态目录。', SETUP_PROBLEMS.foreignFile[1]],

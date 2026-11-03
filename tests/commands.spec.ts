@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { CliError, Commands, commandError } from '../src/infra/commands.ts'
+import { CliError, Commands, commandError, commandLaunch } from '../src/infra/commands.ts'
 import { feishuKind } from '../src/sources/feishu.ts'
 import { feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { githubKind } from '../src/sources/github.ts'
@@ -175,6 +175,8 @@ it('names only the program and how it ended when a command prints no diagnostics
   await expect(commands.run('sh', ['-c', 'exit 3', secret])).rejects.toMatchObject({ message: 'sh exited with code 3', exitCode: 3 })
   await expect(commands.run('sh', ['-c', 'kill -9 $$', secret])).rejects.toMatchObject({ message: 'sh was stopped by SIGKILL' })
   await expect(commands.run('/no/such/program', ['secret reply text'])).rejects.toMatchObject({ message: 'program could not run: ENOENT' })
+  // On Windows this path is a batch file and runs through cmd.exe, which reports a missing file differently.
+  if (process.platform !== 'win32') await expect(commands.run('/no/such/gh-agent.cmd', ['api', 'user', 'secret reply text'])).rejects.toMatchObject({ message: 'gh-agent.cmd could not run: ENOENT' })
   // Timeouts kill the child with SIGTERM; Node's default error message would echo every argument.
   const timedOut = { killed: true, signal: 'SIGTERM', code: null, stderr: '',
     message: 'Command failed: /path/lark-bot im +messages-reply --markdown withdrawn' }
@@ -197,6 +199,28 @@ it('reports failures as CliError with the code the CLI names and the exit status
   const commands = new Commands(() => deployment, {}, new AbortController().signal)
   vi.spyOn(commands, 'run').mockResolvedValue(JSON.stringify({ ok: false, error: { code: 231003, message: 'message not found' } }))
   await expect(commands.lark(['im', '+messages-reply'])).rejects.toMatchObject({ message: 'message not found (231003)', code: 231003 })
+})
+
+it('runs a Windows .cmd or .bat through cmd.exe and keeps shell metacharacters inside the argument', () => {
+  const program = 'C:\\Tools\\gh-agent.cmd'
+  const args = ['api', 'user']
+  const shell = process.env.ComSpec || process.env.comspec || 'cmd.exe'
+  // Other platforms, and a real .exe, stay a direct spawn. `shell: true` would re-split argv.
+  expect(commandLaunch(program, args, 'linux')).toEqual({ file: program, args })
+  expect(commandLaunch('C:\\Tools\\gh.exe', args, 'win32')).toEqual({ file: 'C:\\Tools\\gh.exe', args })
+  expect(commandLaunch('C:\\Tools\\gh-agent.CMD', args, 'win32')).toEqual({ file: shell, windowsVerbatimArguments: true,
+    args: ['/d', '/s', '/c', '"C:\\Tools\\gh-agent.CMD ^"api^" ^"user^""'] })
+  const spaced = 'C:\\Program Files\\gh-agent.bat'
+  const dangerous = 'body=`whoami` $(touch x) & echo hi'
+  const launch = commandLaunch(spaced, ['-f', dangerous], 'win32')
+  expect(launch).toMatchObject({ file: shell, windowsVerbatimArguments: true, args: ['/d', '/s', '/c', expect.any(String)] })
+  const command = launch.args[3]!
+  expect(command.startsWith('"') && command.endsWith('"')).toBe(true)
+  expect(command).toContain('Program^ Files\\gh-agent.bat')
+  // cmd.exe would otherwise treat `&` as a command separator. The caret keeps it inside the argument.
+  expect(command).toContain('^&')
+  expect(command).toContain('whoami')
+  expect(command).not.toContain(' & ')
 })
 
 it('stops a running command when the signal of its work aborts, or the lifetime, and leaves the other work running', async () => {

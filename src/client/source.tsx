@@ -9,7 +9,7 @@ import { usePanel, usePanelData } from './provider.tsx'
 import { setupPage, settingsRoute, type Route } from './route.ts'
 import { ConfigHistory, Fields, SourceField, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { actorName, healthText, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
-import { CheckSetupButton, Hint, LabelValue, LoadState, SetupMessage, StatusHead, When } from './widgets.tsx'
+import { CheckSetupButton, Hint, LabelValue, LoadState, PollRetryButton, SetupMessage, StatusHead, When } from './widgets.tsx'
 
 function SourceCard({ source }: { source: SourceView }) {
   const { t, call } = usePanel()
@@ -92,7 +92,7 @@ function DroppedReplies({ items }: { items: DroppedReply[] }) {
     </div>
   </DisclosureRow>
 }
-function SourceRow({ source }: { source: SourceStatusRow }) {
+function SourceRow({ source, reload }: { source: SourceStatusRow; reload: () => Promise<void> }) {
   const { t, navigate } = usePanel()
   const { setup } = usePanelData()
   const [filteredOpen, setFilteredOpen] = useState(false)
@@ -122,6 +122,8 @@ function SourceRow({ source }: { source: SourceStatusRow }) {
         {valueLabel(t, 'health', item.name)}{t('labelSeparator')}<span className={item.code ? undefined : 'dt-mono'}>{healthText(t,
           item)}</span>
       </p>)}
+      {source.retryPoll && !problem && !setup?.problem && <div className="dt-row-buttons"><PollRetryButton id={source.id}
+        reload={reload} /></div>}
       {source.filtered.length > 0 && <DisclosureRow icon={<Icon name="filter" />} title={t('sourceFilteredTitle')} open={filteredOpen}
         onToggle={() => setFilteredOpen(!filteredOpen)}>
         <div className="dt-disclosure-body">
@@ -141,7 +143,7 @@ function SourceRow({ source }: { source: SourceStatusRow }) {
 export function SourceStatus() {
   const { t, call, navigate } = usePanel()
   const { setup } = usePanelData()
-  const { data, error } = usePoll(() => call('GET sources'), [])
+  const { data, error, reload } = usePoll(() => call('GET sources'), [])
   // Global deployment setup problems halt all Sources and show at the top; Source-specific setup problems show on that Source's row.
   const elsewhere = setup?.problem?.place === 'deployment' ? setup.problem : undefined
   return <div className="dt-form">
@@ -151,6 +153,6 @@ export function SourceStatus() {
         onClick={() => navigate(setupPage(elsewhere.place))}>{t('setupFixLink')}</button>
     </p>}
     <LoadState error={error} loading={!data} />
-    {data && <ul className="dt-list">{data.map(source => <SourceRow key={source.id} source={source} />)}</ul>}
+    {data && <ul className="dt-list">{data.map(source => <SourceRow key={source.id} source={source} reload={reload} />)}</ul>}
   </div>
 }

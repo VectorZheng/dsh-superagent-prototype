@@ -173,6 +173,21 @@ it('lists an Eval past its deadline, and as dsh-superagent\'s own errors only pa
   expect(found.filter(item => item.kind === 'runtime-error')).toEqual([{ kind: 'runtime-error', name: 'relay', detail: 'relay failing' },
     { kind: 'runtime-error', name: 'reply', detail: 'reply failing' }])
   expect(found.filter(item => item.kind === 'source-error').map(item => item.source.health.name)).toEqual(['feishu', 'history'])
+  expect(found.filter(item => item.kind === 'source-error').every(item => item.source.retryPoll === false)).toBe(true)
+})
+
+it('offers an immediate poll only for a poll-failure of a Source that can run one', () => {
+  const host = views()
+  const polls = { state: 'error' as const, detail: '2 consecutive failed polls; last: EOF', code: 'pollFailures' as const,
+    values: { count: '2', error: 'EOF' } }
+  const listed = sourcesStatus(host, { github: polls, feishu: { state: 'error', detail: 'socket closed' } }, {})
+  expect(listed.find(source => source.id === 'github')?.retryPoll).toBe(true)
+  expect(listed.find(source => source.id === 'feishu')?.retryPoll).toBe(false)
+  expect(sourcesStatus(host, { github: { state: 'error', detail: 'socket closed' } }, {}).find(source => source.id === 'github')?.retryPoll).toBe(false)
+  const setup = { place: 'github' as const, code: 'agentCliUnset' as const, values: {}, detail: 'The agent GitHub CLI is not set.' }
+  expect(sourcesStatus(host, { github: polls }, { problem: setup }).find(source => source.id === 'github')?.retryPoll).toBe(false)
+  expect(problems(host, { github: polls }).find(item => item.kind === 'source-error' && item.source.id === 'github'))
+    .toMatchObject({ source: { retryPoll: true, health: { code: 'pollFailures' } } })
 })
 
 it('says no Source runs when every Source is off, and states a Source missing or off', () => {

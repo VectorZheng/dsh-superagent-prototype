@@ -205,6 +205,10 @@ it('shows a Source\'s health in the interface language, and a diagnostic as repo
   expect(github.textContent).not.toContain('consecutive')
   const feishu = all('.dt-form > .dt-list > .dt-row').find(row => row.querySelector('.dt-row-name')?.textContent === '飞书')!
   expect(feishu.querySelector('.dt-mono')?.textContent).toBe('socket closed')
+  expect(feishu.textContent).not.toContain(zh.sourcePollRetry)
+  await click(find(zh.sourcePollRetry, 'button'))
+  expect(server.requests.some(request => request.method === 'POST' && request.path === 'sources/github/poll')).toBe(true)
+  expect(text()).toContain(zh.sourcePollRetrying)
 })
 
 it('shows a refused Source save with the output of the tool that failed on its own line', async () => {

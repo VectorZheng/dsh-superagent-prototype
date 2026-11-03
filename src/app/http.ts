@@ -24,6 +24,7 @@ import type { Variable } from './execution-environment.ts'
 import { policyHistory } from './settings-history.ts'
 import { overview } from './views/overview.ts'
 import { settingsView } from './views/settings.ts'
+import { requestPoll } from '../sources/poll.ts'
 import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
@@ -160,6 +161,12 @@ function routes(runtime: HttpHost): Routes {
     'GET sources': () => sourcesStatus(views(runtime), runtime.health, setupState(runtime)),
     'GET settings': () => settingsView(store, runtime.sources, runtime.health, setupState(runtime), runtime.machine.stateDir),
     'POST sources/:id/labels': ({ params }) => runtime.settings.refreshLabels(params.id),
+    'POST sources/:id/poll': ({ params }) => {
+      if (!runtime.sources.instances().some(item => item.id === params.id)) throw new RouteError(404, 'Source not found')
+      // Wakes the running poll loop. It does not restart dsh-superagent; a loop that has already exited cannot be woken.
+      if (!requestPoll(params.id)) throw new UserError('sourceNotPolling', { source: params.id })
+      return { polling: true }
+    },
     'GET threads': ({ query }) => {
       const { filter, offset, limit } = ThreadsQuery.parse(query)
       return threadList(views(runtime), filter, offset, limit)

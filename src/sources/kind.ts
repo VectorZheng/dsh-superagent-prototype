@@ -94,6 +94,11 @@ export interface SourceKind<C extends Record<string, unknown> = Record<string, u
   fields: FieldSpec[]
   /** Health entry names owned by this kind under `health[...]`; no other kind or core loop may report them. */
   health: string[]
+  /**
+   * When true, a `pollFailures` error offers an immediate poll from the panel.
+   * The kind's loop registers that wake with `onPollRequest`.
+   */
+  pollRetry?: true
   /** Listening rule for a trigger (or recorded Mandate basis) of this kind; kinds without `scope` listen to everything they produce and observe none of it. */
   scope?(input: { meta: Record<string, unknown> }, config: C): ScopeResult
   /** Outbound reply adapter; kinds without `channel` produce no replies or channel checks. */
