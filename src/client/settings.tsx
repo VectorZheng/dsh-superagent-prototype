@@ -30,7 +30,7 @@ export function SettingsPage({ group, query, state, deploymentForm }: {
         aria-current={value === group ? 'page' : undefined} onClick={() => navigate(settingsRoute(value),
           true)}>{t(`settingsGroup.${value}`)}</button>)}
     </nav>
-    <div className="dt-settings-body">
+    <div className="dt-settings-body" key={group}>
       <h2 className="dt-settings-title">{t(`settingsGroup.${group}`)}</h2>
       {content}
     </div>

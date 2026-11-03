@@ -1,18 +1,19 @@
 /* Panel layout and local UI controls styled with DSH `--dsw-alias-*` design tokens; one rule per line. */
-.dt-page { box-sizing: border-box; height: 100%; overflow: auto; scrollbar-gutter: stable; scroll-padding: 48px 0 72px; container-type: inline-size; padding: 28px clamp(24px, 4vw, 48px) 0; color: var(--dsw-alias-label-primary); }
+/* Lock the host pane. Header and page tabs stay put; only `.dt-main` scrolls, so Settings cannot carry them under the host frame or the sticky group nav. */
+.dt-page { box-sizing: border-box; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; container-type: inline-size; padding: 28px clamp(24px, 4vw, 48px) 0; color: var(--dsw-alias-label-primary); }
 /* Deployment page rendered inside DSH Plugin Manager, which owns scrolling and padding. */
 .dt-embedded { container-type: inline-size; color: var(--dsw-alias-label-primary); }
 /* Disable sticky positioning inside DSH Plugin Manager, where the host container owns scrolling and bottom padding. */
 .dt-embedded .dt-savebar { position: static; }
-.dt-page > .dt-column { max-width: 960px; margin: 0 auto; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
-.dt-head { position: relative; z-index: 3; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.dt-page > .dt-column { box-sizing: border-box; width: min(960px, 100%); min-height: 0; margin: 0 auto; flex: 1; display: flex; flex-direction: column; gap: 24px; }
+.dt-head { position: relative; z-index: 3; flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
 .dt-search { position: relative; width: 240px; max-width: 100%; }
 .dt-search-results { position: absolute; top: calc(100% + 6px); right: 0; width: min(560px, 90cqw); max-height: 60vh; overflow: auto; padding: 8px 16px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 12px; background: var(--dsw-alias-bg-layer-2); box-shadow: var(--dsw-elevation-prominent); z-index: 5; display: flex; flex-direction: column; gap: 8px; }
 .dt-mark { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 25%, transparent); color: inherit; border-radius: 2px; }
 [data-platform='darwin'] .dt-page .dt-head { padding-top: var(--dsh-frame-top-clearance, 0px); }
 .dt-title { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .dt-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.dt-page .dt-tabs { overflow-x: auto; display: flex; gap: 20px; max-width: none; padding: 0; border-radius: 0; background: none; border-bottom: 0.5px solid var(--dsw-alias-border-l3); }
+.dt-page .dt-tabs { overflow-x: auto; overflow-y: hidden; flex: none; display: flex; gap: 20px; max-width: none; padding: 0; border-radius: 0; background: none; border-bottom: 0.5px solid var(--dsw-alias-border-l3); }
 .dt-segmented { width: 100%; max-width: 420px; box-sizing: border-box; display: inline-grid; gap: 2px; padding: 3px; border-radius: 9px; background: var(--dsw-alias-interactive-bg-hover); }
 .dt-form.dt-block { padding: 16px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 16px; gap: 16px; }
 .dt-block-title { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; }
@@ -105,7 +106,10 @@
 .dt-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .dt-changes { display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 20px; }
 .dt-changes li::before { content: '· '; color: var(--dsw-alias-label-caption); }
-.dt-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.dt-main { box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 0; flex: 1; overflow: auto; scrollbar-gutter: stable; scroll-padding: 48px 0 72px; }
+.dt-main > :last-child:not(.dt-settings) { margin-bottom: 48px; }
+/* Settings fills the pane and scrolls its own body. The group list stays outside that scroller, so it cannot cover the page tabs or the form. */
+.dt-main:has(> .dt-settings) { overflow: hidden; }
 .dt-modal.dt-glossary-modal { width: min(680px, 100%); }
 .dt-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
 .dt-nav-item:hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -298,13 +302,14 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-stat { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--dsw-alias-label-caption); }
 .dt-stat-value { font-size: 14px; font-weight: 500; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
 .dt-more-link { font-size: 12px; font-weight: 400; }
-.dt-settings { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 24px; align-items: start; }
-.dt-settings-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; }
+.dt-settings { display: grid; grid-template-columns: 140px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 24px; align-items: stretch; flex: 1; min-height: 0; overflow: hidden; }
+.dt-settings-nav { position: static; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
 .dt-settings-link { padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .dt-settings-link:hover { color: var(--dsw-alias-label-primary); }
 .dt-settings-link[aria-current='page'] { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-primary); font-weight: 500; }
 .dt-settings-link[data-stage] + .dt-settings-link:not([data-stage]) { margin-top: 10px; }
-.dt-settings-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dt-settings-body { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow: auto; scroll-padding: 24px 0 72px; padding-bottom: 48px; overscroll-behavior: contain; }
+.dt-settings-body > *, .dt-settings-nav > * { flex: none; }
 .dt-settings-title { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
 .dt-subtabs { display: flex; gap: 16px; border-bottom: 0.5px solid var(--dsw-alias-border-l3); }
 .dt-subtab { padding: 0 0 6px; border: 0; background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 13px; cursor: pointer; }
@@ -315,8 +320,8 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-table th { text-align: left; font-weight: 400; color: var(--dsw-alias-label-caption); padding: 2px 8px 2px 0; }
 .dt-table td { padding: 4px 8px 4px 0; border-top: 0.5px solid var(--dsw-alias-border-l3); vertical-align: top; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 @container (max-width: 640px) {
-  .dt-settings { grid-template-columns: 1fr; gap: 12px; }
-  .dt-settings-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+  .dt-settings { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
+  .dt-settings-nav { overflow: visible; flex-direction: row; flex-wrap: wrap; }
   .dt-settings-link[data-stage] + .dt-settings-link:not([data-stage]) { margin-top: 0; }
   .dt-page .dt-tabs { gap: 14px; }
 }

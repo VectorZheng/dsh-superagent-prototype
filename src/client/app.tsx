@@ -141,8 +141,17 @@ function Header({ masterId }: { masterId: string | undefined }) {
 function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab: Tab) => void; deploymentForm: DeploymentForm }) {
   const { t } = usePanel()
   const { state, error, reload } = usePanelData()
-  // Keep the active tab scrolled into view on narrow screens when routes change via links.
-  useEffect(() => { document.getElementById(`dt-tab-${route.page}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) }, [route.page])
+  // Keep the active tab in view on a narrow strip. Scroll only the tablist: scrolling an ancestor
+  // slides the header and tabs under the host frame (the Settings click that covers the options above).
+  useEffect(() => {
+    const tab = document.getElementById(`dt-tab-${route.page}`)
+    const list = tab?.parentElement
+    if (!tab || !list) return
+    const tabBox = tab.getBoundingClientRect()
+    const listBox = list.getBoundingClientRect()
+    if (tabBox.left < listBox.left) list.scrollLeft -= listBox.left - tabBox.left
+    else if (tabBox.right > listBox.right) list.scrollLeft += tabBox.right - listBox.right
+  }, [route.page])
   const waiting = error ? <p className="dt-error" role="alert">{error.message}</p> : <p className="dt-hint">{t('loading')}</p>
   const page = (() => {
     switch (route.page) {
@@ -164,7 +173,7 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
       {error && state && <p className="dt-error" role="status">{error.message}</p>}
       <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
         items={TABS.map(value => ({ value, label: t(`tab.${value}`), id: `dt-tab-${value}`, panelId: 'dt-page' }))} />
-      <main id="dt-page" role="tabpanel" aria-labelledby={`dt-tab-${route.page}`} className="dt-main">{page}</main>
+      <main key={route.page} id="dt-page" role="tabpanel" aria-labelledby={`dt-tab-${route.page}`} className="dt-main">{page}</main>
     </div>
   </div>
 }
